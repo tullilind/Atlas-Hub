@@ -1,4 +1,4 @@
-name: HADES - Atualizar manifesto da Release
+name: HADES - Publicar manifesto estável
 
 on:
   release:
@@ -6,12 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag da release, exemplo: hades-v0.9.2"
+        description: "Tag já publicada, exemplo: hades-v0.9.2"
         required: true
         type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: hades-stable-manifest
+  cancel-in-progress: false
 
 jobs:
   update-manifest:
@@ -26,18 +30,58 @@ jobs:
         shell: bash
         run: |
           TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          VERSION="${TAG#hades-v}"
+          python3 - "$VERSION" <<'PY'
+          import re, sys
+          if not re.fullmatch(r"\d+\.\d+\.\d+(?:\.\d+)?", sys.argv[1]):
+              raise SystemExit("Versão inválida: " + sys.argv[1])
+          PY
           echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "VERSION=${TAG#hades-v}" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Baixar artefatos oficiais da release
+      - name: Baixar os quatro artefatos obrigatórios
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p .hades-release
-          gh release download "$TAG" --dir .hades-release --pattern "HADES-Setup-*-windows-x64.exe" || true
-          gh release download "$TAG" --dir .hades-release --pattern "HADES-*-debian-amd64.deb" || true
-          find .hades-release -maxdepth 1 -type f -printf '%f\n'
+          gh release download "$TAG" --dir .hades-release --pattern "HADES-Setup-$VERSION-windows-x64.exe"
+          gh release download "$TAG" --dir .hades-release --pattern "HADES-Setup-$VERSION-windows-x64.exe.sha256"
+          gh release download "$TAG" --dir .hades-release --pattern "HADES-$VERSION-debian-amd64.deb"
+          gh release download "$TAG" --dir .hades-release --pattern "HADES-$VERSION-debian-amd64.deb.sha256"
+          test -f ".hades-release/HADES-Setup-$VERSION-windows-x64.exe"
+          test -f ".hades-release/HADES-Setup-$VERSION-windows-x64.exe.sha256"
+          test -f ".hades-release/HADES-$VERSION-debian-amd64.deb"
+          test -f ".hades-release/HADES-$VERSION-debian-amd64.deb.sha256"
 
-      - name: Gerar manifesto estável com SHA-256
+      - name: Validar SHA-256 publicados
+        shell: python
+        run: |
+          import hashlib, os
+          from pathlib import Path
+
+          root = Path(".hades-release")
+          version = os.environ["VERSION"]
+          artifacts = [
+              root / f"HADES-Setup-{version}-windows-x64.exe",
+              root / f"HADES-{version}-debian-amd64.deb",
+          ]
+
+          def sha256(path):
+              h = hashlib.sha256()
+              with path.open("rb") as f:
+                  for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          for artifact in artifacts:
+              sidecar = Path(str(artifact) + ".sha256")
+              published = sidecar.read_text(encoding="utf-8").strip().split()[0].lower()
+              actual = sha256(artifact)
+              if published != actual:
+                  raise SystemExit(f"SHA-256 divergente em {artifact.name}: publicado={published} real={actual}")
+              print(f"OK {artifact.name}: {actual}")
+
+      - name: Gerar manifesto, identidade e registro da release
         shell: python
         run: |
           import hashlib, json, os
@@ -45,7 +89,9 @@ jobs:
           from datetime import datetime, timezone
 
           root = Path(".hades-release")
-          assets = []
+          version = os.environ["VERSION"]
+          tag = os.environ["TAG"]
+          repo = "${{ github.repository }}"
 
           def digest(path):
               h = hashlib.sha256()
@@ -54,53 +100,89 @@ jobs:
                       h.update(chunk)
               return h.hexdigest()
 
-          for path in sorted(root.glob("*")):
-              if path.name.endswith("-windows-x64.exe"):
-                  assets.append({
-                      "os": "windows",
-                      "arch": "x86_64",
-                      "package": "exe",
-                      "name": path.name,
-                      "url": f"https://github.com/${{ github.repository }}/releases/download/{os.environ['TAG']}/{path.name}",
-                      "sha256": digest(path),
-                      "size": path.stat().st_size,
-                  })
-              elif path.name.endswith("-debian-amd64.deb"):
-                  assets.append({
-                      "os": "linux",
-                      "distros": ["debian", "ubuntu"],
-                      "arch": "x86_64",
-                      "package": "deb",
-                      "name": path.name,
-                      "url": f"https://github.com/${{ github.repository }}/releases/download/{os.environ['TAG']}/{path.name}",
-                      "sha256": digest(path),
-                      "size": path.stat().st_size,
-                  })
+          win = root / f"HADES-Setup-{version}-windows-x64.exe"
+          deb = root / f"HADES-{version}-debian-amd64.deb"
+          now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-          if not assets:
-              raise SystemExit("Nenhum artefato HADES compatível foi encontrado na release.")
+          assets = [
+              {
+                  "os": "windows",
+                  "arch": "x86_64",
+                  "package": "exe",
+                  "name": win.name,
+                  "url": f"https://github.com/{repo}/releases/download/{tag}/{win.name}",
+                  "sha256": digest(win),
+                  "size": win.stat().st_size,
+              },
+              {
+                  "os": "linux",
+                  "distros": ["debian", "ubuntu"],
+                  "arch": "x86_64",
+                  "package": "deb",
+                  "name": deb.name,
+                  "url": f"https://github.com/{repo}/releases/download/{tag}/{deb.name}",
+                  "sha256": digest(deb),
+                  "size": deb.stat().st_size,
+              },
+          ]
 
           manifest = {
               "schema": 1,
               "product": "HADES",
               "channel": "stable",
-              "latest": os.environ["VERSION"],
-              "published_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "notes": f"Atualização oficial HADES {os.environ['VERSION']}.",
+              "latest": version,
+              "published_at": now,
+              "notes": f"Atualização oficial HADES {version}.",
+              "release_url": f"https://github.com/{repo}/releases/tag/{tag}",
               "assets": assets,
           }
-          target = Path("HADES/manifests/stable.json")
-          target.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          manifest_path = Path("HADES/manifests/stable.json")
+          manifest_path.parent.mkdir(parents=True, exist_ok=True)
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-      - name: Commitar manifesto
+          identity = {
+              "product": "HADES",
+              "version": version,
+              "publisher": "ATLAS TECNOLOGIA",
+              "channel": "stable",
+              "manifest": f"https://raw.githubusercontent.com/{repo}/main/HADES/manifests/stable.json",
+              "release": f"https://github.com/{repo}/releases/tag/{tag}",
+              "supported_platforms": ["windows-x86_64", "debian-x86_64", "ubuntu-x86_64"],
+              "published_at": now,
+          }
+          Path("HADES/version.json").write_text(json.dumps(identity, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+          release_record = {
+              "product": "HADES",
+              "version": version,
+              "tag": tag,
+              "published_at": now,
+              "assets": assets,
+          }
+          release_path = Path("HADES/releases") / f"{version}.json"
+          release_path.parent.mkdir(parents=True, exist_ok=True)
+          release_path.write_text(json.dumps(release_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+          attached = root / f"HADES-{version}-manifest.json"
+          attached.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          manifest_sha = hashlib.sha256(attached.read_bytes()).hexdigest()
+          Path(str(attached) + ".sha256").write_text(f"{manifest_sha}  {attached.name}\n", encoding="utf-8")
+
+      - name: Anexar manifesto à própria Release
         shell: bash
         run: |
+          gh release upload "$TAG" --repo "${{ github.repository }}" --clobber             ".hades-release/HADES-$VERSION-manifest.json"             ".hades-release/HADES-$VERSION-manifest.json.sha256"
+
+      - name: Commitar canal estável
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name "ATLAS HADES Release Bot"
           git config user.email "hades-release-bot@users.noreply.github.com"
-          git add HADES/manifests/stable.json
+          git add HADES/manifests/stable.json HADES/version.json "HADES/releases/$VERSION.json"
           if git diff --cached --quiet; then
-            echo "Manifesto já estava atualizado."
+            echo "Canal estável já estava atualizado."
             exit 0
           fi
-          git commit -m "HADES: atualizar manifesto para $VERSION"
+          git commit -m "HADES: publicar canal estável $VERSION"
           git push

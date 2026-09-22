@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "product": "HADES",
+  "channel": "stable",
+  "latest": "0.9.1",
+  "published_at": "2026-09-22T12:00:00Z",
+  "notes": "HADES 0.9.1: módulo de atualização oficial, detecção Windows/Debian, validação SHA-256, confirmação pós-reinício, instalação canônica, termos de instalação e infraestrutura de rollback.",
+  "assets": []
+}

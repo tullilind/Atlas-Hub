@@ -112,3 +112,23 @@ gh auth login
 ```
 
 O build local funciona sem `gh`; a CLI só é exigida quando `--upload-draft` ou a publicação local são usados.
+
+
+## Diagnóstico da etapa 4 no Windows
+
+Se o build parar em `[4/8] Executando validadores do HADES`, use o arquivo do pacote-fonte:
+
+```bat
+diagnosticar_etapa4_windows.cmd
+```
+
+Ele testa separadamente:
+
+- Python e arquitetura;
+- ambiente virtual;
+- dependências essenciais;
+- `compileall`;
+- `validar_hades.py`;
+- `tools\\validar_atualizador.py`.
+
+O CMD permanece aberto em erro e grava `diagnostico_etapa4_windows.log`. O build principal também não fecha mais silenciosamente: mostra a subetapa que falhou e as últimas linhas do diagnóstico. Para automação/CI, use `--no-pause`.

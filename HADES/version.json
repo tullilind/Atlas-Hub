@@ -1,0 +1,12 @@
+{
+  "product": "HADES",
+  "version": "0.9.1",
+  "publisher": "ATLAS TECNOLOGIA",
+  "channel": "stable",
+  "manifest": "https://raw.githubusercontent.com/tullilind/Atlas-Hub/main/HADES/manifests/stable.json",
+  "supported_platforms": [
+    "windows-x86_64",
+    "debian-x86_64",
+    "ubuntu-x86_64"
+  ]
+}

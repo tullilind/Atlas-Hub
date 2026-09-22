@@ -1,0 +1,12 @@
+TERMOS DE INSTALAÇÃO E LICENÇA DE USO DO HADES
+
+Titular: ATLAS TECNOLOGIA
+Produto: HADES - Central de Dados, Relatórios, Qualidade, Integrações e Automação
+
+O HADES é software proprietário da ATLAS TECNOLOGIA. O código-fonte, arquitetura, fluxos, mecânicas, módulos, integrações, layouts, documentação técnica, rotinas de atualização e demais elementos originais desenvolvidos especificamente para o HADES pertencem com exclusividade à ATLAS TECNOLOGIA, ressalvados componentes de terceiros, bibliotecas, marcas e tecnologias submetidos às suas respectivas licenças e titulares.
+
+A instalação concede apenas direito de uso do software e não transfere propriedade intelectual, autoria, titularidade ou direito de revenda. Sem autorização expressa da ATLAS TECNOLOGIA, não é permitido comercializar, sublicenciar ou redistribuir o HADES como produto próprio.
+
+O HADES pode verificar, baixar e instalar atualizações publicadas pela ATLAS TECNOLOGIA. Os pacotes oficiais são validados por versão, sistema operacional, arquitetura e SHA-256 antes da instalação.
+
+Componentes de terceiros permanecem sujeitos às licenças de seus respectivos titulares.
